@@ -1,0 +1,214 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "To-do List";
+}
+
+<style>
+    #itemModal {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #fff;
+        padding: 20px;
+        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.3);
+        z-index: 1000; 
+    }
+
+    #itemModal h2,
+    #itemModal label,
+    #itemModal input,
+    #itemModal textarea,
+    #itemModal select,
+    #itemModal button {
+        display: block;
+        margin: 10px auto;
+    }
+</style>
+
+<form id="addItemForm">
+    <label for="newTitle">Title:</label>
+    <input type="text" id="newTitle" required>
+    <label for="newDescription">Description:</label>
+    <textarea id="newDescription" required></textarea>
+    <button type="submit">Add Task</button>
+</form>
+<button id="deleteSelectedButton">Delete Selected</button>
+<ul id="todoList">
+</ul>
+
+<div id="itemModal" style="display: none;">
+    <h2>Item Details</h2>
+    <label for="title">Title:</label>
+    <input type="text" id="title">
+    <label for="description">Description:</label>
+    <textarea id="description"></textarea>
+    <label for="status">Status:</label>
+    <select id="status">
+        <option value="Pending">Pending</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+    </select>
+    <br/>
+    <br/>
+    <button id="deleteButton">Delete</button>
+    <button id="saveButton">Save</button>
+    <button id="cancelButton">Cancel</button>
+</div>
+
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+
+<script>
+    let baseUrl = "https://localhost:7043/Task";
+    let currentItemID = null;
+    const selectedItems = [];
+
+    function loadTodoList() {
+        $.ajax({
+            url: baseUrl, 
+            method: 'GET',
+            success: function (data) {
+                $('#todoList').empty();
+
+                data.forEach(function (item) {
+                    addItemToList(item);
+                });
+            }
+        });
+    }
+
+    function addItemToList(item) {
+        const li = $('<li></li>');
+        li.attr('data-item-id', item.id);
+        const checkbox = $('<input type="checkbox" class="deleteCheckbox">');
+        li.append(checkbox);
+        li.append(`
+                <strong>${item.title}</strong>
+                <p>${item.description}</p>
+                <span>Status: ${item.status}</span>
+                <button class="viewButton">View</button>
+            `);
+        $('#todoList').append(li);
+    }
+
+    function openItemModal(item) {
+        currentItemID = item ? item.id : null;
+        $('#title').val(item.title);
+        $('#description').val(item.description);
+        $('#status').val(item.status);
+        $('#itemModal').show();
+    }
+
+    function closeItemModal() {
+        currentItemID = null;
+        $('#itemModal').hide();
+    }
+
+    $(document).ready(function () {
+        loadTodoList();
+
+        $('#addItemForm').submit(function (e) {
+            e.preventDefault();
+            const newTitle = $('#newTitle').val();
+            const newDescription = $('#newDescription').val();
+            $.ajax({
+                url: baseUrl, 
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    title: newTitle,
+                    description: newDescription
+                }),
+                success: function (data) {
+                    addItemToList(data);
+                    $('#addItemForm')[0].reset();
+                }
+            });
+        });
+
+        $('#todoList').on('click', '.viewButton', function () {
+            const itemId = $(this).closest('li').data('itemId');
+            $.ajax({
+                url: baseUrl + `/${itemId}`, 
+                method: 'GET',
+                success: function (data) {
+                    openItemModal(data);
+                }
+            });
+        });
+
+        $('#saveButton').click(function () {
+            const updatedTitle = $('#title').val();
+            const updatedDescription = $('#description').val();
+            const updatedStatus = $('#status').val();
+            $.ajax({
+                url: baseUrl + `/${currentItemID}`, 
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    id: currentItemID,
+                    title: updatedTitle,
+                    description: updatedDescription,
+                    status: updatedStatus
+                }),
+                success: function (data) {
+                    const listItem = $('#todoList li[data-item-id="' + currentItemID + '"]');
+                    listItem.find('strong').text(data.title);
+                    listItem.find('p').text(data.description);
+                    listItem.find('span').text(`Status: ${data.status}`);
+                    closeItemModal();
+                }
+            });
+        });
+
+        $('#deleteButton').click(function () {
+            $.ajax({
+                url: baseUrl + `/${currentItemID}`, 
+                method: 'DELETE',
+                success: function () {
+                    const listItem = $('#todoList li[data-item-id="' + currentItemID + '"]');
+                    listItem.remove();
+                    closeItemModal();
+                }
+            });
+        });
+
+        $('#cancelButton').click(function () {
+            closeItemModal();
+        });
+
+        $('#todoList').on('change', '.deleteCheckbox', function () {
+            const itemId = $(this).closest('li').data('item-id');
+
+            if (this.checked) {
+                selectedItems.push(itemId);
+            } else {
+                const index = selectedItems.indexOf(itemId);
+                if (index !== -1) {
+                    selectedItems.splice(index, 1);
+                }
+            }
+        });
+
+        $('#deleteSelectedButton').click(function () {
+            if (selectedItems.length > 0) {
+                $.ajax({
+                    url: baseUrl+'/Delete', 
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(selectedItems),
+                    success: function () {
+                        selectedItems.forEach(function (itemId) {
+                            $('#todoList li[data-item-id="' + itemId + '"]').remove();
+                        });
+                        selectedItems.length = 0;
+                    }
+                });
+            }
+        });
+    });
+    </script>
+
